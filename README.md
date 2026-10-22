@@ -46,6 +46,10 @@ fornecedor; por isso aparecem como **sob consulta**.
    ```
    (o caminho exato aparece em *Admin → Sincronização*).
 
+**Modo modelo (padrão):** a sincronização importa só 40 produtos de categorias variadas, com até
+12 combinações cada, em poucos minutos. Para o catálogo completo, em *Configurações → Sincronização*
+coloque `0` nos dois campos do modo modelo e inicie uma nova sincronização.
+
 A primeira leitura completa percorre ~600 produtos e dezenas de milhares de combinações e leva
 algumas horas; o cron continua sozinho de onde parou. Depois disso, os preços são atualizados a
 cada 24 horas (configurável). Enquanto isso, o catálogo já mostra o que foi importado.

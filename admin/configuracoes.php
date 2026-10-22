@@ -33,6 +33,8 @@ $grupos = [
         'texto_rodape' => ['Observações (rodapé e PDF)', '', 'textarea'],
     ],
     'Sincronização' => [
+        'modelo_produtos'       => ['Modo modelo: quantos produtos importar', 'Use 0 para importar o catálogo completo (~600 produtos, leva horas). Vale na próxima sincronização.', 'number'],
+        'modelo_combinacoes'    => ['Modo modelo: combinações por produto', 'Quantas opções (material, formato…) ler de cada produto. 0 = todas.', 'number'],
         'intervalo_sync_horas'  => ['Atualizar preços a cada (horas)', 'Uma leitura completa leva algumas horas; 24 h ou mais é o recomendado.', 'number'],
         'requisicoes_paralelas' => ['Páginas lidas em paralelo', 'Entre 1 e 8. Mais rápido, porém mais carga no site de origem.', 'number'],
         'atraso_requisicao_ms'  => ['Pausa entre lotes (ms)', '', 'number'],

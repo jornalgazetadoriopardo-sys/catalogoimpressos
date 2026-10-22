@@ -21,6 +21,12 @@ function iniciar_sincronizacao(): int
     if (!$urls) {
         throw new RuntimeException('Nenhum produto encontrado no sitemap.');
     }
+    // Modo modelo: só alguns produtos, espalhados pelo sitemap para pegar categorias variadas
+    $limite = (int) cfg('modelo_produtos');
+    if ($limite > 0 && count($urls) > $limite) {
+        $passo = count($urls) / $limite;
+        $urls = array_map(fn($i) => $urls[(int) floor($i * $passo)], range(0, $limite - 1));
+    }
     db_exec('DELETE FROM fila');
     $agora = agora();
     db()->beginTransaction();
@@ -134,7 +140,18 @@ function salvar_pagina(array $d, string $inicio): int
         // categorias ocultos no admin não têm as variações lidas (economiza tempo).
         $oculto = db_valor('SELECT 1 FROM produtos p LEFT JOIN categorias c ON c.slug = p.categoria_slug
                             WHERE p.slug = ? AND (p.visivel = 0 OR c.visivel = 0)', [$d['slug']]);
+        // Modo modelo: limita quantas combinações de cada produto são lidas
+        $maxComb = (int) cfg('modelo_combinacoes');
+        $vagas = PHP_INT_MAX;
+        if ($maxComb > 0) {
+            $lidas = (int) db_valor('SELECT COUNT(*) FROM combinacoes WHERE produto_slug = ? AND atualizado_em >= ?', [$d['slug'], $inicio]);
+            $naFila = (int) db_valor("SELECT COUNT(*) FROM fila WHERE status = 'pendente' AND url LIKE ?", ['%/produto/' . $d['slug'] . '?%']);
+            $vagas = $maxComb - $lidas - $naFila;
+        }
         foreach ($oculto ? [] : $d['variacoes'] as $sku => $caminho) {
+            if ($novas >= $vagas) {
+                break;
+            }
             $lido = db_valor('SELECT 1 FROM precos WHERE sku = ? AND atualizado_em >= ?', [$sku, $inicio]);
             if (!$lido) {
                 $url = rtrim(config('origem'), '/') . $caminho;

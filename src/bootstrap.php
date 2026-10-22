@@ -76,6 +76,8 @@ function configuracoes_padrao(): array
         'intervalo_sync_horas'=> '24',
         'atraso_requisicao_ms'=> '300',
         'requisicoes_paralelas'=> '4',
+        'modelo_produtos'     => '40',   // 0 = importar todos os produtos
+        'modelo_combinacoes'  => '12',   // 0 = todas as combinações de cada produto
     ];
 }
 
