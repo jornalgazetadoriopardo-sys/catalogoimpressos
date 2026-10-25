@@ -15,6 +15,10 @@ function curl_produto(string $url)
         CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; CatalogoImpressos/1.0)',
         CURLOPT_HTTPHEADER     => ['Accept-Language: pt-BR,pt;q=0.9'],
     ]);
+    // XAMPP no Windows costuma vir sem certificados configurados: usa o pacote incluído
+    if (!ini_get('curl.cainfo') && !ini_get('openssl.cafile') && is_file(RAIZ . '/src/cacert.pem')) {
+        curl_setopt($ch, CURLOPT_CAINFO, RAIZ . '/src/cacert.pem');
+    }
     return $ch;
 }
 
@@ -78,17 +82,53 @@ function texto_limpo(string $html): string
     return trim(preg_replace("/\n\s*/u", "\n", $t));
 }
 
-/** Lista as URLs de produto do sitemap. */
-function urls_do_sitemap(string $origem): array
+/**
+ * Cartões de produto de uma página de categoria ou de busca do site:
+ * nome, link, foto, departamento e o preço "a partir de".
+ */
+function ler_cartoes_produtos(string $html): array
 {
-    $xml = baixar($origem . '/sitemap');
-    preg_match_all('#<loc>\s*([^<]+/produto/[^<]+?)\s*</loc>#', $xml, $m);
-    $urls = [];
-    foreach ($m[1] as $u) {
-        $u = html_entity_decode(trim($u));
-        $urls[preg_replace('#\?.*$#', '', $u)] = true;
+    $cartoes = [];
+    $blocos = preg_split('#(?=<div class="card-prod\b)#', $html);
+    foreach ($blocos as $b) {
+        if (!preg_match('#<a href="(/produto/([^"?]+)[^"]*)" class=nome-produto-galeria[^>]*>(.*?)</a>#s', $b, $m)) {
+            continue;
+        }
+        $slug = $m[2];
+        if (isset($cartoes[$slug])) {
+            continue;
+        }
+        $cartoes[$slug] = [
+            'slug'         => $slug,
+            'nome'         => texto_limpo($m[3]),
+            'imagem'       => preg_match('#<img class=card-prod-img[^>]*?\ssrc="([^"]+)"#', $b, $i) ? html_entity_decode($i[1]) : '',
+            'departamento' => preg_match('#class=departamento-card>([^<]+)<#', $b, $d) ? texto_limpo($d[1]) : '',
+            'preco'        => preg_match('#prod-preco>\s*R\$\s*([\d.,]+)#', $b, $p) ? numero_br($p[1]) : null,
+            'unidade'      => preg_match('#</span>\s*<small>\s*/\s*([^<]+?)\s*</small>#', $b, $u) ? texto_limpo($u[1]) : '',
+        ];
     }
-    return array_keys($urls);
+    return array_values($cartoes);
+}
+
+/** Departamentos e categorias do mapa do site: [['nome' => …, 'categorias' => [['slug','nome'], …]], …] */
+function departamentos_do_site(string $origem): array
+{
+    $html = preg_replace('#<script.*?</script>#s', '', baixar($origem . '/mapa-do-site'));
+    $ini = strpos($html, 'Departamentos e categorias');
+    $fim = $ini === false ? false : strpos($html, '>Produtos<', $ini);
+    if ($ini === false || $fim === false) {
+        throw new RuntimeException('Não foi possível ler o mapa do site.');
+    }
+    preg_match_all('#<h[2-6][^>]*>(.*?)</h[2-6]>|<a [^>]*href="?/([a-z0-9-]+)"?[^>]*>([^<]+)</a>#s', substr($html, $ini, $fim - $ini), $m, PREG_SET_ORDER);
+    $deps = [];
+    foreach ($m as $x) {
+        if ($x[1] !== '') {
+            $deps[] = ['nome' => texto_limpo($x[1]), 'categorias' => []];
+        } elseif ($deps) {
+            $deps[count($deps) - 1]['categorias'][] = ['slug' => $x[2], 'nome' => texto_limpo($x[3])];
+        }
+    }
+    return array_values(array_filter($deps, fn($d) => $d['categorias']));
 }
 
 function slug_da_url(string $url): string
@@ -206,6 +246,7 @@ function ler_pagina_produto(string $html, string $url): array
     }
 
     return [
+        'url'            => $url,
         'slug'           => $slug,
         'sku_atual'      => $skuAtual,
         'nome'           => $nome,

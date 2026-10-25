@@ -73,11 +73,13 @@ function configuracoes_padrao(): array
         'retirada_texto'      => 'Retirada grátis no nosso endereço.',
         'texto_rodape'        => 'Preços sujeitos a alteração sem aviso prévio. Arte não inclusa.',
         'mostrar_unitario'    => '1',
-        'intervalo_sync_horas'=> '24',
+        'atualizacao_auto_horas' => '0',  // 0 = só pelo botão "Atualizar valores"
         'atraso_requisicao_ms'=> '300',
         'requisicoes_paralelas'=> '4',
-        'modelo_produtos'     => '40',   // 0 = importar todos os produtos
-        'modelo_combinacoes'  => '12',   // 0 = todas as combinações de cada produto
+        'orc_validade_dias'   => '7',
+        'orc_pagamento'       => 'PIX ou cartão. 50% na aprovação e 50% na entrega.',
+        'orc_prazo_entrega'   => 'Produção após aprovação da arte e do pagamento.',
+        'orc_observacoes'     => 'Arte não inclusa. Valores válidos para os arquivos enviados prontos para impressão.',
     ];
 }
 
@@ -98,8 +100,30 @@ function salvar_cfg(string $chave, string $valor): void
     $GLOBALS['cfg_cache'][$chave] = $valor;
 }
 
-function link_whatsapp(string $mensagem): string
+/** Endereço da logo: enviada pelo admin (caminho relativo) ou um link externo. */
+function logo_src(): string
 {
-    $numero = preg_replace('/\D/', '', cfg('whatsapp'));
+    $logo = cfg('logo_url');
+    return $logo === '' || preg_match('#^https?://#', $logo) ? $logo : url_base() . $logo;
+}
+
+/**
+ * Imagens do fornecedor passam pelo img.php: ficam guardadas no servidor,
+ * reduzidas, e servidas pelo próprio domínio (necessário para gerar o PDF).
+ */
+function img_url(?string $url, int $largura = 400): string
+{
+    if (!$url) {
+        return url_base() . 'assets/sem-foto.svg';
+    }
+    return url_base() . 'img.php?w=' . $largura . '&u=' . rawurlencode($url);
+}
+
+function link_whatsapp(string $mensagem, ?string $numero = null): string
+{
+    $numero = preg_replace('/\D/', '', $numero ?? cfg('whatsapp'));
+    if ($numero !== '' && strlen($numero) <= 11) {
+        $numero = '55' . $numero; // número brasileiro digitado sem DDI
+    }
     return 'https://wa.me/' . $numero . '?text=' . rawurlencode($mensagem);
 }

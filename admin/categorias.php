@@ -16,15 +16,16 @@ if (post_valido()) {
 
 $categorias = db_todos(
     'SELECT c.*, COUNT(p.slug) total, SUM(CASE WHEN p.visivel = 1 THEN 1 ELSE 0 END) visiveis
-     FROM categorias c LEFT JOIN produtos p ON p.categoria_slug = c.slug AND p.ativo_origem = 1
+     FROM categorias c JOIN produtos p ON p.categoria_slug = c.slug
      GROUP BY c.slug, c.nome, c.margem, c.visivel, c.ordem ORDER BY c.ordem, c.nome'
 );
 
-admin_topo('Categorias', 'categorias.php');
+admin_topo('Configurações', 'categorias.php');
+abas_configuracoes('categorias.php');
 ?>
 <form method="post" class="painel">
   <?= campo_csrf() ?>
-  <p class="mudo">Deixe a margem em branco para usar a margem padrão (<?= e(cfg('margem_padrao')) ?>%). Categorias ocultas não aparecem no catálogo, e as variações dos seus produtos não são lidas na sincronização.</p>
+  <p class="mudo">Deixe a margem em branco para usar a margem padrão (<?= e(cfg('margem_padrao')) ?>%). Categorias ocultas não aparecem no catálogo. As categorias são criadas automaticamente quando você adiciona produtos.</p>
   <div class="rolagem">
     <table class="tabela">
       <thead><tr><th>Visível</th><th>Categoria</th><th>Produtos</th><th>Margem (%)</th><th>Ordem</th><th></th></tr></thead>
@@ -39,7 +40,7 @@ admin_topo('Categorias', 'categorias.php');
             <td><a href="produtos.php?categoria=<?= e(urlencode($c['slug'])) ?>">produtos</a></td>
           </tr>
         <?php endforeach; ?>
-        <?php if (!$categorias): ?><tr><td colspan="6" class="mudo">Nenhuma categoria. Faça a sincronização primeiro.</td></tr><?php endif; ?>
+        <?php if (!$categorias): ?><tr><td colspan="6" class="mudo">Nenhuma categoria ainda. Elas aparecem quando você adiciona produtos.</td></tr><?php endif; ?>
       </tbody>
     </table>
   </div>

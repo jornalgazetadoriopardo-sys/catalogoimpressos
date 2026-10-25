@@ -38,7 +38,8 @@ $regioes = db_todos('SELECT * FROM frete_regioes ORDER BY cep_inicio');
 $editar = isset($_GET['editar']) ? db_um('SELECT * FROM frete_regioes WHERE id = ?', [(int) $_GET['editar']]) : null;
 $fmtCep = fn($c) => substr($c, 0, 5) . '-' . substr($c, 5);
 
-admin_topo('Frete', 'frete.php');
+admin_topo('Configurações', 'frete.php');
+abas_configuracoes('frete.php');
 ?>
 <div class="painel">
   <p>Cadastre faixas de CEP com valor e prazo de entrega. Quando um CEP cai em mais de uma faixa, vale a menor (mais específica).

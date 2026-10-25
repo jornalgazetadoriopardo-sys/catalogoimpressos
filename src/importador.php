@@ -4,39 +4,85 @@ declare(strict_types=1);
 require_once __DIR__ . '/leitor.php';
 
 /**
- * Sincronização em etapas: iniciar_sincronizacao() monta a fila a partir do
- * sitemap e processar_fila() consome a fila por um tempo limitado, para caber
- * nos limites de execução da hospedagem compartilhada. Pode ser chamada
- * repetidamente (cron ou botão no admin) até a fila esvaziar.
+ * Fila de leitura do site da gráfica, processada aos poucos (botão no admin
+ * ou cron) para caber nos limites da hospedagem compartilhada.
+ *
+ * - adicionar_produtos(): lê a página do produto e segue os links para todas
+ *   as combinações dele (material, formato, acabamento…).
+ * - iniciar_atualizacao(): relê uma página por combinação já cadastrada e
+ *   atualiza os preços; não procura combinações novas.
  */
 
-function sincronizacao_em_andamento(): bool
+function fila_ativa(): bool
 {
-    return cfg('sync_inicio') !== '' && cfg('sync_fim') === '';
+    return (bool) db_valor("SELECT 1 FROM fila WHERE status = 'pendente' LIMIT 1");
 }
 
-function iniciar_sincronizacao(): int
+function enfileirar(string $url, bool $descobrir): bool
 {
-    $urls = urls_do_sitemap(rtrim(config('origem'), '/'));
-    if (!$urls) {
-        throw new RuntimeException('Nenhum produto encontrado no sitemap.');
+    if (db_valor("SELECT 1 FROM fila WHERE url = ? AND status = 'pendente'", [$url])) {
+        return false;
     }
-    // Modo modelo: só alguns produtos, espalhados pelo sitemap para pegar categorias variadas
-    $limite = (int) cfg('modelo_produtos');
-    if ($limite > 0 && count($urls) > $limite) {
-        $passo = count($urls) / $limite;
-        $urls = array_map(fn($i) => $urls[(int) floor($i * $passo)], range(0, $limite - 1));
+    db_upsert('fila', [
+        'url' => $url, 'status' => 'pendente', 'tentativas' => 0, 'erro' => null,
+        'descobrir' => $descobrir ? 1 : 0, 'atualizado_em' => agora(),
+    ], ['url']);
+    return true;
+}
+
+/** Começa um trabalho novo se a fila estiver vazia (limpa o histórico anterior). */
+function abrir_trabalho(string $tipo): void
+{
+    if (fila_ativa()) {
+        return;
     }
     db_exec('DELETE FROM fila');
-    $agora = agora();
-    db()->beginTransaction();
-    foreach ($urls as $u) {
-        db_upsert('fila', ['url' => $u, 'status' => 'pendente', 'tentativas' => 0, 'erro' => null, 'atualizado_em' => $agora], ['url']);
+    salvar_cfg('trabalho_tipo', $tipo);
+    salvar_cfg('trabalho_inicio', agora());
+    salvar_cfg('trabalho_fim', '');
+}
+
+/** Aceita slugs ou links de produto do site. Retorna quantos foram enfileirados. */
+function adicionar_produtos(array $itens): int
+{
+    $origem = rtrim(config('origem'), '/');
+    $slugs = [];
+    foreach ($itens as $i) {
+        $s = slug_da_url((string) $i) ?: preg_replace('/[^a-z0-9-]/', '', strtolower(trim((string) $i)));
+        if ($s !== '') {
+            $slugs[$s] = true;
+        }
     }
-    db()->commit();
-    salvar_cfg('sync_inicio', $agora);
-    salvar_cfg('sync_fim', '');
-    return count($urls);
+    if (!$slugs) {
+        return 0;
+    }
+    abrir_trabalho('adicionar');
+    $n = 0;
+    foreach (array_keys($slugs) as $s) {
+        $n += enfileirar("$origem/produto/$s", true) ? 1 : 0;
+    }
+    return $n;
+}
+
+/** Enfileira uma página por combinação cadastrada (de todos ou de alguns produtos). */
+function iniciar_atualizacao(array $slugs = []): int
+{
+    $origem = rtrim(config('origem'), '/');
+    $where = '';
+    if ($slugs) {
+        $where = 'WHERE c.produto_slug IN (' . implode(',', array_fill(0, count($slugs), '?')) . ')';
+    }
+    $linhas = db_todos(
+        "SELECT c.produto_slug, MIN(p.sku) sku FROM combinacoes c JOIN precos p ON p.combinacao_id = c.id
+         $where GROUP BY c.id, c.produto_slug",
+        $slugs
+    );
+    abrir_trabalho('atualizar');
+    $n = 0;
+    foreach ($linhas as $l) {
+        $n += enfileirar("$origem/produto/{$l['produto_slug']}?id={$l['sku']}", false) ? 1 : 0;
+    }
+    return $n;
 }
 
 /** Processa itens da fila por até $segundos. Retorna o resumo da fila. */
@@ -45,12 +91,12 @@ function processar_fila(int $segundos, ?callable $log = null): array
     $limite = microtime(true) + $segundos;
     $atraso = max(0, (int) cfg('atraso_requisicao_ms')) * 1000;
     $paralelo = min(8, max(1, (int) cfg('requisicoes_paralelas')));
-    $inicio = cfg('sync_inicio');
+    $inicio = cfg('trabalho_inicio');
 
     while (microtime(true) < $limite) {
-        $itens = db_todos("SELECT url, tentativas FROM fila WHERE status = 'pendente' ORDER BY atualizado_em, url LIMIT $paralelo");
+        $itens = db_todos("SELECT url, tentativas, descobrir FROM fila WHERE status = 'pendente' ORDER BY atualizado_em, url LIMIT $paralelo");
         if (!$itens) {
-            finalizar_sincronizacao($inicio);
+            finalizar_trabalho();
             break;
         }
         $paginas = baixar_varios(array_column($itens, 'url'));
@@ -61,10 +107,14 @@ function processar_fila(int $segundos, ?callable $log = null): array
                     throw $paginas[$url];
                 }
                 $dados = ler_pagina_produto($paginas[$url], $url);
-                $novas = salvar_pagina($dados, $inicio);
+                if (!$dados['precos']) {
+                    throw new RuntimeException('Página sem tabela de preços (produto sob orçamento ou indisponível).');
+                }
+                $novas = salvar_pagina($dados, $inicio, (bool) $item['descobrir']);
                 db_exec("UPDATE fila SET status = 'ok', atualizado_em = ? WHERE url = ?", [agora(), $url]);
                 if ($log) {
-                    $log(sprintf('ok  %s  (%d preços, %d novas variações)', $url, count($dados['precos']), $novas));
+                    $log(sprintf('%s — %s%s', $dados['nome'], implode(' · ', $dados['especificacoes']) ?: 'opção padrão',
+                        $novas ? " (+$novas opções)" : ''));
                 }
             } catch (Throwable $ex) {
                 $tent = (int) $item['tentativas'] + 1;
@@ -81,12 +131,9 @@ function processar_fila(int $segundos, ?callable $log = null): array
     return resumo_fila();
 }
 
-/** Grava a página lida e retorna quantas variações novas foram enfileiradas. */
-function salvar_pagina(array $d, string $inicio): int
+/** Grava a página lida e retorna quantas combinações novas foram enfileiradas. */
+function salvar_pagina(array $d, string $inicio, bool $descobrir): int
 {
-    if ($d['slug'] === '' || !$d['precos']) {
-        return 0; // página sem preço (ex.: produto sob orçamento)
-    }
     $novas = 0;
     $agora = agora();
     db()->beginTransaction();
@@ -98,14 +145,16 @@ function salvar_pagina(array $d, string $inicio): int
             'slug'          => $d['slug'],
             'nome'          => $d['nome'],
             'categoria_slug'=> $d['categoria']['slug'] ?? null,
-            'ativo_origem'  => 1,
             'atualizado_em' => $agora,
         ];
-        // A descrição e a imagem principal vêm da primeira página lida do produto
-        $existe = db_um('SELECT atualizado_em FROM produtos WHERE slug = ?', [$d['slug']]);
-        if (!$existe || $existe['atualizado_em'] < $inicio) {
+        // Descrição e imagem principal vêm da página principal do produto
+        $existe = db_um('SELECT slug, descricao FROM produtos WHERE slug = ?', [$d['slug']]);
+        if (!$existe || ($descobrir && !str_contains($d['url'] ?? '', '?id=')) || (string) $existe['descricao'] === '') {
             $produto['descricao'] = $d['descricao'];
             $produto['imagem'] = $d['imagem'];
+        }
+        if (!$existe) {
+            $produto['adicionado_em'] = $agora;
         }
         db_upsert('produtos', $produto, ['slug']);
 
@@ -125,6 +174,9 @@ function salvar_pagina(array $d, string $inicio): int
         ], ['chave']);
         $combId = (int) db_valor('SELECT id FROM combinacoes WHERE chave = ?', [$chave]);
 
+        // Quantidades que sumiram desta combinação no site deixam de valer
+        $skus = array_column($d['precos'], 'sku');
+        db_exec('DELETE FROM precos WHERE combinacao_id = ? AND sku NOT IN (' . implode(',', array_map('intval', $skus)) . ')', [$combId]);
         foreach ($d['precos'] as $p) {
             db_upsert('precos', [
                 'sku'           => $p['sku'],
@@ -136,28 +188,12 @@ function salvar_pagina(array $d, string $inicio): int
             ], ['sku']);
         }
 
-        // Enfileira combinações ainda não lidas nesta sincronização. Produtos ou
-        // categorias ocultos no admin não têm as variações lidas (economiza tempo).
-        $oculto = db_valor('SELECT 1 FROM produtos p LEFT JOIN categorias c ON c.slug = p.categoria_slug
-                            WHERE p.slug = ? AND (p.visivel = 0 OR c.visivel = 0)', [$d['slug']]);
-        // Modo modelo: limita quantas combinações de cada produto são lidas
-        $maxComb = (int) cfg('modelo_combinacoes');
-        $vagas = PHP_INT_MAX;
-        if ($maxComb > 0) {
-            $lidas = (int) db_valor('SELECT COUNT(*) FROM combinacoes WHERE produto_slug = ? AND atualizado_em >= ?', [$d['slug'], $inicio]);
-            $naFila = (int) db_valor("SELECT COUNT(*) FROM fila WHERE status = 'pendente' AND url LIKE ?", ['%/produto/' . $d['slug'] . '?%']);
-            $vagas = $maxComb - $lidas - $naFila;
-        }
-        foreach ($oculto ? [] : $d['variacoes'] as $sku => $caminho) {
-            if ($novas >= $vagas) {
-                break;
-            }
-            $lido = db_valor('SELECT 1 FROM precos WHERE sku = ? AND atualizado_em >= ?', [$sku, $inicio]);
-            if (!$lido) {
-                $url = rtrim(config('origem'), '/') . $caminho;
-                if (!db_valor('SELECT 1 FROM fila WHERE url = ?', [$url])) {
-                    db_upsert('fila', ['url' => $url, 'status' => 'pendente', 'tentativas' => 0, 'erro' => null, 'atualizado_em' => $agora], ['url']);
-                    $novas++;
+        if ($descobrir) {
+            $origem = rtrim(config('origem'), '/');
+            foreach ($d['variacoes'] as $sku => $caminho) {
+                if (!db_valor('SELECT 1 FROM precos WHERE sku = ? AND atualizado_em >= ?', [$sku, $inicio])
+                    && !db_valor('SELECT 1 FROM fila WHERE url = ?', [$origem . $caminho])) {
+                    $novas += enfileirar($origem . $caminho, true) ? 1 : 0;
                 }
             }
         }
@@ -169,20 +205,33 @@ function salvar_pagina(array $d, string $inicio): int
     }
 }
 
-/** Ao fim da fila: remove o que sumiu do site de origem. */
-function finalizar_sincronizacao(string $inicio): void
+/**
+ * Fim da fila. Numa atualização sem erros, combinações que não foram relidas
+ * (o site mudou as opções) são removidas; com erros, nada é apagado.
+ */
+function finalizar_trabalho(): void
 {
-    if (!sincronizacao_em_andamento()) {
-        return;
+    if (cfg('trabalho_fim') !== '') {
+        return; // já finalizado
     }
-    // Se alguma página falhou, mantém os dados antigos para não sumir produto por erro de rede
+    $inicio = cfg('trabalho_inicio');
     $erros = (int) db_valor("SELECT COUNT(*) FROM fila WHERE status = 'erro'");
-    if ($erros === 0) {
-        db_exec('DELETE FROM precos WHERE atualizado_em < ?', [$inicio]);
-        db_exec('DELETE FROM combinacoes WHERE id NOT IN (SELECT DISTINCT combinacao_id FROM precos)');
-        db_exec('UPDATE produtos SET ativo_origem = 0 WHERE atualizado_em < ?', [$inicio]);
+    if (cfg('trabalho_tipo') === 'atualizar' && $erros === 0 && $inicio !== '') {
+        // só nos produtos que participaram desta atualização
+        $slugs = array_column(db_todos('SELECT DISTINCT produto_slug FROM combinacoes WHERE atualizado_em >= ?', [$inicio]), 'produto_slug');
+        foreach ($slugs as $slug) {
+            $velhas = array_map('intval', array_column(db_todos('SELECT id FROM combinacoes WHERE produto_slug = ? AND atualizado_em < ?', [$slug, $inicio]), 'id'));
+            if ($velhas) {
+                db_exec('DELETE FROM precos WHERE combinacao_id IN (' . implode(',', $velhas) . ')');
+                db_exec('DELETE FROM combinacoes WHERE id IN (' . implode(',', $velhas) . ')');
+            }
+        }
     }
-    salvar_cfg('sync_fim', agora());
+    db_exec('DELETE FROM combinacoes WHERE id NOT IN (SELECT DISTINCT combinacao_id FROM precos)');
+    salvar_cfg('trabalho_fim', agora());
+    if (cfg('trabalho_tipo') === 'atualizar') {
+        salvar_cfg('ultima_atualizacao', agora());
+    }
 }
 
 function resumo_fila(): array
@@ -191,8 +240,15 @@ function resumo_fila(): array
     foreach (db_todos('SELECT status, COUNT(*) n FROM fila GROUP BY status') as $l) {
         $r[$l['status']] = (int) $l['n'];
     }
-    $r['em_andamento'] = sincronizacao_em_andamento();
-    $r['inicio'] = cfg('sync_inicio');
-    $r['fim'] = cfg('sync_fim');
+    $r['em_andamento'] = $r['pendente'] > 0;
+    $r['tipo'] = cfg('trabalho_tipo');
     return $r;
+}
+
+/** Remove um produto e tudo que pertence a ele. */
+function remover_produto(string $slug): void
+{
+    db_exec('DELETE FROM precos WHERE combinacao_id IN (SELECT id FROM combinacoes WHERE produto_slug = ?)', [$slug]);
+    db_exec('DELETE FROM combinacoes WHERE produto_slug = ?', [$slug]);
+    db_exec('DELETE FROM produtos WHERE slug = ?', [$slug]);
 }

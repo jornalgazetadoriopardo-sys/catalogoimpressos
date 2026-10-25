@@ -65,16 +65,16 @@ function margem_digitada($v): ?string
     return $v === '' ? null : (string) (float) $v;
 }
 
-function admin_topo(string $titulo, string $ativo): void
+function admin_topo(string $titulo, string $ativo, string $acoes = ''): void
 {
     $menu = [
         'index.php'         => 'Início',
-        'configuracoes.php' => 'Configurações',
-        'categorias.php'    => 'Categorias',
+        'orcamentos.php'    => 'Orçamentos',
         'produtos.php'      => 'Produtos',
-        'frete.php'         => 'Frete',
-        'importar.php'      => 'Sincronização',
+        'adicionar.php'     => 'Adicionar produtos',
+        'configuracoes.php' => 'Configurações',
     ];
+    $grupoConfig = ['configuracoes.php', 'frete.php', 'categorias.php'];
     ?>
 <!doctype html>
 <html lang="pt-BR">
@@ -83,21 +83,49 @@ function admin_topo(string $titulo, string $ativo): void
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title><?= e($titulo) ?> | Admin</title>
-<link rel="stylesheet" href="../assets/estilo.css?v=1">
+<link rel="stylesheet" href="../assets/estilo.css?v=3">
+<script>window.ADMIN = { csrf: <?= json_encode(token_csrf()) ?>, continuarFila: <?= db_valor("SELECT 1 FROM fila WHERE status = 'pendente' LIMIT 1") ? 'true' : 'false' ?> };</script>
+<script src="../assets/admin.js?v=2" defer></script>
 </head>
-<body>
+<body class="admin">
 <header class="admin-topo"><div class="container">
-  <strong><?= e(cfg('nome_empresa')) ?></strong>
-  <?php foreach ($menu as $arq => $nome): ?>
-    <a href="<?= $arq ?>" class="<?= $ativo === $arq ? 'ativo' : '' ?>"><?= $nome ?></a>
-  <?php endforeach; ?>
+  <a class="admin-marca" href="index.php"><?= e(cfg('nome_empresa')) ?></a>
+  <nav class="admin-menu">
+    <?php foreach ($menu as $arq => $nome):
+        $on = $ativo === $arq || ($arq === 'configuracoes.php' && in_array($ativo, $grupoConfig, true))
+            || ($arq === 'orcamentos.php' && $ativo === 'orcamento.php'); ?>
+      <a href="<?= $arq ?>" class="<?= $on ? 'ativo' : '' ?>"><?= $nome ?></a>
+    <?php endforeach; ?>
+  </nav>
   <a href="../" target="_blank">Ver catálogo ↗</a>
   <a class="sair" href="sair.php">Sair</a>
 </div></header>
 <main class="container">
-<h1><?= e($titulo) ?></h1>
+<div class="admin-titulo"><h1><?= e($titulo) ?></h1><?= $acoes ?></div>
 <?= flash() ?>
 <?php
+}
+
+/** Abas da área de configurações. */
+function abas_configuracoes(string $ativa): void
+{
+    $abas = ['configuracoes.php' => 'Geral', 'frete.php' => 'Frete por região', 'categorias.php' => 'Categorias'];
+    echo '<nav class="abas">';
+    foreach ($abas as $arq => $nome) {
+        echo '<a href="' . $arq . '" class="' . ($ativa === $arq ? 'ativo' : '') . '">' . $nome . '</a>';
+    }
+    echo '</nav>';
+}
+
+/** Painel que mostra o andamento de "adicionar produtos" / "atualizar valores". */
+function painel_progresso(): string
+{
+    return '<div class="painel progresso" id="progresso" hidden>
+      <div class="progresso-topo"><strong id="progresso-titulo">Lendo o site da gráfica…</strong><span id="progresso-numeros"></span></div>
+      <div class="barra"><div id="progresso-barra"></div></div>
+      <p class="mudo" id="progresso-dica">Pode levar alguns minutos. Mantenha esta página aberta.</p>
+      <details><summary>Detalhes</summary><div class="log" id="progresso-log"></div></details>
+    </div>';
 }
 
 function admin_rodape(): void

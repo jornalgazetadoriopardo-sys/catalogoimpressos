@@ -8,9 +8,9 @@ $grupos = [
     'Empresa' => [
         'nome_empresa' => ['Nome da empresa'],
         'slogan'       => ['Frase abaixo do nome'],
-        'logo_url'     => ['Endereço da logo (URL da imagem)', 'Envie a logo pelo Gerenciador de Arquivos da Hostinger e cole o link aqui.'],
+        'logo_url'     => ['Logo', 'Imagem PNG, JPG ou WEBP de até 2 MB.', 'logo'],
         'cor_primaria' => ['Cor principal', '', 'color'],
-        'whatsapp'     => ['WhatsApp para pedidos', 'Com DDI e DDD, ex.: 5551999999999'],
+        'whatsapp'     => ['WhatsApp para pedidos', 'Com DDD, ex.: 51999999999'],
         'telefone'     => ['Telefone'],
         'email'        => ['E-mail'],
         'endereco'     => ['Endereço'],
@@ -29,22 +29,25 @@ $grupos = [
         'retirada_ativa'     => ['Oferecer retirada', '', 'select', ['1' => 'Sim', '0' => 'Não']],
         'retirada_texto'     => ['Texto da retirada'],
     ],
-    'Textos' => [
-        'texto_rodape' => ['Observações (rodapé e PDF)', '', 'textarea'],
+    'Orçamentos' => [
+        'orc_validade_dias' => ['Validade padrão do orçamento (dias)', '', 'number'],
+        'orc_prazo_entrega' => ['Texto padrão de prazo'],
+        'orc_pagamento'     => ['Forma de pagamento padrão', '', 'textarea'],
+        'orc_observacoes'   => ['Observações padrão', '', 'textarea'],
     ],
-    'Sincronização' => [
-        'modelo_produtos'       => ['Modo modelo: quantos produtos importar', 'Use 0 para importar o catálogo completo (~600 produtos, leva horas). Vale na próxima sincronização.', 'number'],
-        'modelo_combinacoes'    => ['Modo modelo: combinações por produto', 'Quantas opções (material, formato…) ler de cada produto. 0 = todas.', 'number'],
-        'intervalo_sync_horas'  => ['Atualizar preços a cada (horas)', 'Uma leitura completa leva algumas horas; 24 h ou mais é o recomendado.', 'number'],
-        'requisicoes_paralelas' => ['Páginas lidas em paralelo', 'Entre 1 e 8. Mais rápido, porém mais carga no site de origem.', 'number'],
-        'atraso_requisicao_ms'  => ['Pausa entre lotes (ms)', '', 'number'],
+    'Textos' => [
+        'texto_rodape' => ['Observações do catálogo (rodapé e PDF)', '', 'textarea'],
+    ],
+    'Atualização de valores' => [
+        'atualizacao_auto_horas' => ['Atualizar valores automaticamente a cada (horas)', '0 = só pelo botão "Atualizar valores". Para o automático funcionar, configure o cron (veja o README).', 'number'],
+        'requisicoes_paralelas'  => ['Páginas lidas em paralelo', 'Entre 1 e 8.', 'number'],
     ],
 ];
 
 if (post_valido()) {
     foreach ($grupos as $campos) {
         foreach (array_keys($campos) as $chave) {
-            if (isset($_POST[$chave])) {
+            if (isset($_POST[$chave]) && $chave !== 'logo_url') {
                 $v = trim((string) $_POST[$chave]);
                 if (in_array($chave, ['margem_padrao', 'frete_padrao_valor', 'frete_gratis_acima'], true)) {
                     $v = (string) (float) str_replace(',', '.', $v);
@@ -53,13 +56,36 @@ if (post_valido()) {
             }
         }
     }
+    // Logo enviada: fica em assets/uploads, no mesmo domínio (necessário para o PDF)
+    if (!empty($_POST['remover_logo'])) {
+        salvar_cfg('logo_url', '');
+    }
+    $up = $_FILES['logo_arquivo'] ?? null;
+    if ($up && $up['error'] === UPLOAD_ERR_OK) {
+        $tipos = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp'];
+        $mime = (new finfo(FILEINFO_MIME_TYPE))->file($up['tmp_name']);
+        if (!isset($tipos[$mime]) || $up['size'] > 2 * 1024 * 1024) {
+            flash('A logo precisa ser PNG, JPG ou WEBP com até 2 MB.', true);
+            voltar('configuracoes.php');
+        }
+        $pasta = RAIZ . '/assets/uploads';
+        if (!is_dir($pasta)) {
+            mkdir($pasta, 0755, true);
+        }
+        foreach (glob($pasta . '/logo.*') ?: [] as $antigo) {
+            @unlink($antigo);
+        }
+        move_uploaded_file($up['tmp_name'], $pasta . '/logo.' . $tipos[$mime]);
+        salvar_cfg('logo_url', 'assets/uploads/logo.' . $tipos[$mime] . '?v=' . time());
+    }
     flash('Configurações salvas.');
     voltar('configuracoes.php');
 }
 
 admin_topo('Configurações', 'configuracoes.php');
+abas_configuracoes('configuracoes.php');
 ?>
-<form method="post">
+<form method="post" enctype="multipart/form-data">
   <?= campo_csrf() ?>
   <?php foreach ($grupos as $titulo => $campos): ?>
     <section class="painel">
@@ -74,6 +100,9 @@ admin_topo('Configurações', 'configuracoes.php');
               <select id="<?= $chave ?>" name="<?= $chave ?>">
                 <?php foreach ($opcoes as $v => $t): ?><option value="<?= e($v) ?>" <?= (string) $v === $valor ? 'selected' : '' ?>><?= e($t) ?></option><?php endforeach; ?>
               </select>
+            <?php elseif ($tipo === 'logo'): ?>
+              <?php if ($valor): ?><img src="<?= e(logo_src()) ?>" alt="" class="logo-previa"><label class="mudo"><input type="checkbox" name="remover_logo" value="1"> remover</label><?php endif; ?>
+              <input id="<?= $chave ?>" name="logo_arquivo" type="file" accept="image/png,image/jpeg,image/webp">
             <?php elseif ($tipo === 'textarea'): ?>
               <textarea id="<?= $chave ?>" name="<?= $chave ?>" rows="3"><?= e($valor) ?></textarea>
             <?php else: ?>

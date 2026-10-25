@@ -52,7 +52,7 @@ $base = url_base();
   <span><?= e($produto['nome']) ?></span></nav>
 
 <article class="produto" id="produto">
-  <div class="produto-img"><img id="img-produto" src="<?= e($combinacoes[0]['imagem'] ?: $produto['imagem']) ?>" alt="<?= e($produto['nome']) ?>"></div>
+  <div class="produto-img"><img id="img-produto" src="<?= e($combinacoes[0]['imagem'] ?: img_url($produto['imagem'], 800)) ?>" alt="<?= e($produto['nome']) ?>"></div>
 
   <div class="produto-info">
     <h1><?= e($produto['nome']) ?></h1>

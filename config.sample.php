@@ -1,7 +1,9 @@
 <?php
 // Copie este arquivo para config.php e preencha com os dados da sua hospedagem.
 return [
-    // Banco de dados (Hostinger: hPanel > Bancos de Dados > MySQL)
+    // Banco de dados
+    //   Hostinger: hPanel > Bancos de Dados > MySQL (nome e usuário começam com u000…)
+    //   XAMPP:     nome 'catalogo', usuario 'root', senha '' (vazia)
     'db' => [
         'driver'  => 'mysql',          // 'mysql' na hospedagem; 'sqlite' para testes locais
         'host'    => 'localhost',
@@ -15,8 +17,8 @@ return [
     'admin_usuario' => 'admin',
     'admin_senha'   => 'troque-esta-senha',
 
-    // Chave para disparar a sincronização por URL (cron via wget/curl), caso o
-    // cron da hospedagem não rode PHP pela linha de comando.
+    // Chave para a atualização automática de valores por URL (cron via wget/curl),
+    // caso o cron da hospedagem não rode PHP pela linha de comando.
     'chave_cron' => 'troque-por-um-texto-longo-e-aleatorio',
 
     // Site de origem dos produtos

@@ -1,79 +1,91 @@
 # Catálogo de Impressos
 
-Catálogo online e em PDF para enviar aos clientes, montado a partir dos produtos do fornecedor
-(futuraim.com.br). Os preços do fornecedor são lidos automaticamente; no painel você define
-margem, frete, prazos e quais produtos aparecem.
+Catálogo online para os clientes, orçamentos em PDF e painel de gestão, usando os produtos e
+preços do site da gráfica fornecedora (futuraim.com.br). Você escolhe no painel quais produtos
+entram, define margem, frete e prazos, e atualiza os valores com um botão.
 
-Feito em PHP + MySQL, sem dependências, para rodar em hospedagem compartilhada (Hostinger).
+Feito em PHP + MySQL, sem instalar nada além disso: roda no XAMPP e na hospedagem compartilhada
+(Hostinger).
 
-## O que tem
+## Como funciona
 
-- **Catálogo online** (`/`): categorias, busca e "a partir de R$" em cada produto.
-- **Página do produto**: escolha de material, formato, acabamento etc.; tabela de quantidades com o seu
-  preço de venda; prazo de produção; cálculo de frete por CEP; botão **Pedir pelo WhatsApp** com o
-  pedido já escrito.
-- **Catálogo em PDF** (`/catalogo.php`): resumido (a partir de) ou completo (tabelas de preço),
-  filtrando por categoria. Abra e use *Imprimir → Salvar como PDF*.
-- **Painel** (`/admin`):
-  - **Configurações**: dados da empresa, WhatsApp, logo e cor; margem padrão; arredondamento
-    (,90 / inteiro); dias somados ao prazo de produção; frete padrão e frete grátis acima de um valor.
-  - **Categorias**: margem própria, ordem e visibilidade.
-  - **Produtos**: margem própria, visível/oculto e destaque, com o custo e o preço de venda lado a lado.
-  - **Frete**: faixas de CEP com valor e prazo de entrega (ex.: cidade, estado).
-  - **Sincronização**: andamento da leitura dos produtos do fornecedor.
+**Painel** (`/admin`):
 
-O preço de venda é `custo do fornecedor × (1 + margem%)`, arredondado conforme a configuração.
+| Tela | Para quê |
+|---|---|
+| **Início** | Atalhos: novo orçamento, adicionar produtos, atualizar valores, ver catálogo. |
+| **Orçamentos** | Lista, busca, editar, duplicar. Cada orçamento tem um link para o cliente baixar o PDF. |
+| **Produtos** | Produtos cadastrados: margem própria, mostrar/ocultar, destaque, remover. Botão **↻ Atualizar valores** (todos ou os selecionados). |
+| **Adicionar produtos** | Navega pelas categorias do site da gráfica (ou busca, ou cola o link) e adiciona. Todas as opções do produto (material, formato, acabamento, quantidades) são lidas e cadastradas. |
+| **Configurações** | Empresa, logo, WhatsApp, margem padrão, arredondamento, prazo extra, frete, textos padrão do orçamento. Abas para frete por faixa de CEP e margem por categoria. |
+
+**Para o cliente:**
+
+- **Catálogo** (`/`): categorias, busca, preço "a partir de"; na página do produto o cliente escolhe as
+  opções e a quantidade, calcula o frete pelo CEP e pede pelo WhatsApp.
+- **Catálogo em PDF** (`/catalogo.php`): resumido ou com tabelas de preço.
+- **Orçamento** (`/orcamento.php?t=…`): página do orçamento com botão **Baixar PDF**. No painel há um
+  botão para enviar o link pelo WhatsApp do cliente.
+
+**Preço de venda** = custo do fornecedor × (1 + margem %), arredondado conforme a configuração.
 A margem do produto vale sobre a da categoria, que vale sobre a padrão.
 
-Os acabamentos extras (vinco, furo, corte especial) mudam de preço conforme a quantidade no
-fornecedor; por isso aparecem como **sob consulta**.
+Acabamentos extras (vinco, furo, corte especial) aparecem como *sob consulta*: no site da gráfica o
+preço deles muda com a quantidade.
 
-## Instalação na Hostinger
+## Testar no computador (XAMPP)
 
-1. **Banco de dados**: no hPanel, *Bancos de Dados → Gerenciamento*, crie um banco MySQL e um
-   usuário. Anote nome do banco, usuário e senha.
-2. **Arquivos**: envie todos os arquivos deste repositório para `public_html` (ou uma subpasta)
-   pelo *Gerenciador de Arquivos* ou por Git (*Avançado → Git*).
-3. **Configuração**: copie `config.sample.php` para `config.php` e preencha:
-   - dados do banco (`nome`, `usuario`, `senha`; `host` normalmente `localhost`);
-   - `admin_usuario` e `admin_senha` do painel;
-   - `chave_cron` com um texto longo qualquer.
-4. Acesse `https://seusite.com.br/admin`, entre e preencha as **Configurações** (nome, WhatsApp,
-   margem, frete).
-5. **Cron** (*Avançado → Cron Jobs*): crie um cron a cada 10 minutos com o comando
+1. Copie a pasta do projeto para `C:\xampp\htdocs\catalogoimpressos`
+   (baixe o ZIP do GitHub ou use `git clone`).
+2. No **XAMPP Control Panel**, inicie **Apache** e **MySQL**.
+3. Abra http://localhost/phpmyadmin → **Novo** → crie o banco `catalogo` (agrupamento `utf8mb4_unicode_ci`).
+4. Na pasta do projeto, copie `config.sample.php` para `config.php` e ajuste:
+   ```php
+   'nome'    => 'catalogo',
+   'usuario' => 'root',
+   'senha'   => '',
    ```
-   /usr/bin/php /home/SEU_USUARIO/public_html/cron/sincronizar.php
-   ```
-   (o caminho exato aparece em *Admin → Sincronização*).
+   e defina `admin_usuario` / `admin_senha`.
+5. Acesse http://localhost/catalogoimpressos/admin, entre e:
+   - em **Configurações**, preencha empresa, logo, WhatsApp e margem;
+   - em **Adicionar produtos**, escolha alguns produtos;
+   - em **Orçamentos**, crie um orçamento e clique em **Ver / Baixar PDF**.
+6. O catálogo fica em http://localhost/catalogoimpressos.
 
-**Modo modelo (padrão):** a sincronização importa só 40 produtos de categorias variadas, com até
-12 combinações cada, em poucos minutos. Para o catálogo completo, em *Configurações → Sincronização*
-coloque `0` nos dois campos do modo modelo e inicie uma nova sincronização.
+As tabelas do banco são criadas sozinhas no primeiro acesso.
 
-A primeira leitura completa percorre ~600 produtos e dezenas de milhares de combinações e leva
-algumas horas; o cron continua sozinho de onde parou. Depois disso, os preços são atualizados a
-cada 24 horas (configurável). Enquanto isso, o catálogo já mostra o que foi importado.
+Se aparecer erro de certificado SSL ao adicionar produtos, o projeto já traz o arquivo
+`src/cacert.pem` e o usa automaticamente quando o PHP não tem certificados configurados.
+Confira também se as extensões `curl` e `gd` estão ativas no `php.ini` do XAMPP (linhas
+`extension=curl` e `extension=gd` sem `;` na frente) e reinicie o Apache.
 
-Dica: ocultar categorias que você não vende (em *Categorias*) deixa a sincronização bem mais rápida,
-porque as variações desses produtos deixam de ser lidas.
+## Publicar na Hostinger
 
-## Teste local
+1. Crie um banco MySQL em *hPanel → Bancos de Dados*.
+2. Envie os arquivos para `public_html` (Gerenciador de Arquivos ou *Avançado → Git*).
+3. Crie o `config.php` (como acima, com os dados do banco da Hostinger).
+4. Acesse `https://seusite.com.br/admin`.
 
+**Atualização automática (opcional):** em *Configurações → Atualização de valores*, defina de quantas
+em quantas horas atualizar e crie um cron (*hPanel → Avançado → Cron Jobs*) a cada 15 minutos:
 ```
-cp config.sample.php config.php   # e troque o driver para 'sqlite'
-php -S localhost:8000
-php cron/sincronizar.php 60       # importa por 60 segundos
+/usr/bin/php /home/SEU_USUARIO/public_html/cron/sincronizar.php
 ```
+Sem isso, use o botão **↻ Atualizar valores** no painel.
 
 ## Estrutura
 
 ```
-index.php, produto.php, catalogo.php   páginas públicas
-api/frete.php                          cálculo de frete por CEP
+index.php, produto.php, catalogo.php   catálogo público
+orcamento.php                          orçamento para o cliente (PDF)
+img.php                                fotos dos produtos (cache local, reduzidas)
+api/frete.php                          frete por CEP
 admin/                                 painel
-cron/sincronizar.php                   sincronização (cron ou URL com chave)
-src/leitor.php                         leitura das páginas do fornecedor
-src/importador.php                     fila de sincronização
+cron/sincronizar.php                   atualização automática (opcional)
+src/leitor.php                         leitura das páginas do site da gráfica
+src/importador.php                     fila: adicionar produtos e atualizar valores
 src/precos.php                         margem, arredondamento, prazo e frete
-src/db.php                             banco (MySQL na hospedagem, SQLite para testes)
+src/orcamentos.php                     orçamentos
+src/db.php                             banco (MySQL; SQLite para testes)
+assets/vendor/html2pdf.bundle.min.js   geração do PDF no navegador (MIT)
 ```

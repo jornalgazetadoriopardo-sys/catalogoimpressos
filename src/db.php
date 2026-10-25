@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const ESQUEMA_VERSAO = 1;
+const ESQUEMA_VERSAO = 2;
 
 function db(): PDO
 {
@@ -106,6 +106,7 @@ function db_migrar(PDO $pdo): void
             visivel TINYINT NOT NULL DEFAULT 1,
             destaque TINYINT NOT NULL DEFAULT 0,
             ativo_origem TINYINT NOT NULL DEFAULT 1,
+            adicionado_em VARCHAR(19),
             atualizado_em VARCHAR(19)
         )$fim",
         "CREATE TABLE IF NOT EXISTS combinacoes (
@@ -132,6 +133,7 @@ function db_migrar(PDO $pdo): void
             status VARCHAR(10) NOT NULL DEFAULT 'pendente',
             tentativas INT NOT NULL DEFAULT 0,
             erro VARCHAR(255),
+            descobrir TINYINT NOT NULL DEFAULT 1,
             atualizado_em VARCHAR(19)
         )$fim",
         "CREATE TABLE IF NOT EXISTS frete_regioes (
@@ -142,15 +144,60 @@ function db_migrar(PDO $pdo): void
             valor DECIMAL(10,2) NOT NULL,
             prazo_dias INT NOT NULL DEFAULT 0
         )$fim",
+        "CREATE TABLE IF NOT EXISTS orcamentos (
+            id $auto,
+            token CHAR(32) NOT NULL UNIQUE,
+            cliente_nome VARCHAR(160) NOT NULL,
+            cliente_telefone VARCHAR(40),
+            cliente_email VARCHAR(160),
+            cliente_documento VARCHAR(40),
+            cliente_cep VARCHAR(9),
+            frete_descricao VARCHAR(160),
+            frete_valor DECIMAL(10,2) NOT NULL DEFAULT 0,
+            desconto DECIMAL(10,2) NOT NULL DEFAULT 0,
+            validade_dias INT NOT NULL DEFAULT 7,
+            prazo_entrega VARCHAR(160),
+            pagamento VARCHAR(255),
+            observacoes MEDIUMTEXT,
+            criado_em VARCHAR(19),
+            atualizado_em VARCHAR(19)
+        )$fim",
+        "CREATE TABLE IF NOT EXISTS orcamento_itens (
+            id $auto,
+            orcamento_id INT NOT NULL,
+            ordem INT NOT NULL DEFAULT 0,
+            produto_slug VARCHAR(190),
+            imagem VARCHAR(600),
+            titulo VARCHAR(255) NOT NULL,
+            detalhes MEDIUMTEXT,
+            quantidade INT NOT NULL DEFAULT 1,
+            unidade VARCHAR(30),
+            valor DECIMAL(12,2) NOT NULL DEFAULT 0,
+            prazo_dias INT NOT NULL DEFAULT 0
+        )$fim",
     ];
     foreach ($tabelas as $sql) {
         $pdo->exec($sql);
+    }
+    // Colunas criadas depois da primeira versão
+    $colunas = [
+        'produtos.adicionado_em' => 'VARCHAR(19)',
+        'fila.descobrir'         => 'TINYINT NOT NULL DEFAULT 1',
+    ];
+    foreach ($colunas as $alvo => $tipo) {
+        [$tabela, $coluna] = explode('.', $alvo);
+        try {
+            $pdo->query("SELECT $coluna FROM $tabela LIMIT 1");
+        } catch (PDOException $ex) {
+            $pdo->exec("ALTER TABLE $tabela ADD COLUMN $coluna $tipo");
+        }
     }
     $indices = [
         'idx_comb_produto' => 'combinacoes(produto_slug)',
         'idx_precos_comb'  => 'precos(combinacao_id)',
         'idx_prod_cat'     => 'produtos(categoria_slug)',
         'idx_fila_status'  => 'fila(status)',
+        'idx_itens_orc'    => 'orcamento_itens(orcamento_id)',
     ];
     foreach ($indices as $nome => $alvo) {
         try {

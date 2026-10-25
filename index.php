@@ -54,7 +54,7 @@ $base = url_base();
   <div class="grade">
     <?php foreach ($produtos as $p): ?>
       <a class="cartao" href="<?= $base ?>produto.php?p=<?= e(urlencode($p['slug'])) ?>">
-        <div class="cartao-img"><img src="<?= e($p['imagem']) ?>" alt="<?= e($p['nome']) ?>" loading="lazy"></div>
+        <div class="cartao-img"><img src="<?= e(img_url($p['imagem'])) ?>" alt="<?= e($p['nome']) ?>" loading="lazy"></div>
         <div class="cartao-corpo">
           <small><?= e($p['categoria_nome']) ?></small>
           <h2><?= e($p['nome']) ?></h2>

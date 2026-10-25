@@ -75,7 +75,7 @@ $regioes = db_todos('SELECT * FROM frete_regioes ORDER BY valor, nome');
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Catálogo | <?= e($empresa) ?></title>
-<link rel="stylesheet" href="<?= $base ?>assets/estilo.css?v=1">
+<link rel="stylesheet" href="<?= $base ?>assets/estilo.css?v=3">
 <style>:root{--primaria:<?= e(cfg('cor_primaria') ?: '#0b5cab') ?>}</style>
 </head>
 <body class="pg-catalogo">
@@ -102,7 +102,7 @@ $regioes = db_todos('SELECT * FROM frete_regioes ORDER BY valor, nome');
 </form>
 
 <section class="capa">
-  <?php if (cfg('logo_url')): ?><img src="<?= e(cfg('logo_url')) ?>" alt=""><?php endif; ?>
+  <?php if (cfg('logo_url')): ?><img src="<?= e(logo_src()) ?>" alt=""><?php endif; ?>
   <h1><?= e($empresa) ?></h1>
   <p><?= e(cfg('slogan')) ?></p>
   <p class="mudo">Tabela válida em <?= date('d/m/Y') ?></p>
@@ -116,7 +116,7 @@ $regioes = db_todos('SELECT * FROM frete_regioes ORDER BY valor, nome');
       <div class="grade-pdf">
         <?php foreach ($lista as $p): ?>
           <div class="item-pdf">
-            <img src="<?= e($p['imagem']) ?>" alt="" loading="lazy">
+            <img src="<?= e(img_url($p['imagem'])) ?>" alt="" loading="lazy">
             <div><h3><?= e($p['nome']) ?></h3><p class="preco"><span>a partir de</span> <?= moeda($p['preco_min']) ?></p></div>
           </div>
         <?php endforeach; ?>
@@ -125,7 +125,7 @@ $regioes = db_todos('SELECT * FROM frete_regioes ORDER BY valor, nome');
       <?php foreach ($lista as $p): $t = linhas_completas($p); ?>
         <div class="produto-pdf">
           <div class="produto-pdf-topo">
-            <img src="<?= e($p['imagem']) ?>" alt="" loading="lazy">
+            <img src="<?= e(img_url($p['imagem'])) ?>" alt="" loading="lazy">
             <div>
               <h3><?= e($p['nome']) ?></h3>
               <p class="mudo"><?= e(implode(' · ', array_map(fn($k, $v) => "$k: $v", array_keys($t['fixos']), $t['fixos']))) ?></p>

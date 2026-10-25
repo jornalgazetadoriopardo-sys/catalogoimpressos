@@ -13,14 +13,14 @@ function topo(string $titulo, string $classeBody = ''): void
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= e($titulo === $empresa ? $empresa : "$titulo | $empresa") ?></title>
 <meta name="description" content="<?= e(cfg('slogan')) ?>">
-<link rel="stylesheet" href="<?= $base ?>assets/estilo.css?v=1">
+<link rel="stylesheet" href="<?= $base ?>assets/estilo.css?v=3">
 <style>:root{--primaria:<?= e(cfg('cor_primaria') ?: '#0b5cab') ?>}</style>
 </head>
 <body class="<?= e($classeBody) ?>">
 <header class="topo">
   <div class="container topo-linha">
     <a class="marca" href="<?= $base ?>">
-      <?php if (cfg('logo_url')): ?><img src="<?= e(cfg('logo_url')) ?>" alt="<?= e($empresa) ?>"><?php endif; ?>
+      <?php if (cfg('logo_url')): ?><img src="<?= e(logo_src()) ?>" alt="<?= e($empresa) ?>"><?php endif; ?>
       <span><strong><?= e($empresa) ?></strong><small><?= e(cfg('slogan')) ?></small></span>
     </a>
     <form class="busca" action="<?= $base ?>" method="get">
@@ -99,7 +99,7 @@ function combinacoes_do_produto(array $produto): array
             'id'      => (int) $c['id'],
             'specs'   => json_decode((string) $c['especificacoes'], true) ?: [],
             'prazo'   => prazo_producao((int) $c['prazo_dias']),
-            'imagem'  => $c['imagem'],
+            'imagem'  => $c['imagem'] ? img_url($c['imagem'], 800) : '',
             'extras'  => array_map(fn($a) => ['nome' => $a['nome'], 'dias' => $a['dias']], json_decode((string) $c['adicionais'], true) ?: []),
             'precos'  => [],
         ];
